@@ -1,0 +1,73 @@
+#!/usr/bin/env python
+
+import argparse
+import subprocess
+from functools import cache
+from pathlib import Path
+
+base_path = Path('/sys/class/backlight/intel_backlight')
+
+def get_current() -> int:
+    return int((base_path / 'brightness').read_text())
+
+
+@cache
+def get_max() -> int:
+    return int((base_path / 'max_brightness').read_text())
+
+
+@cache
+def get_rate() -> float:
+    return get_max() / 100
+
+
+def action_get(args):
+    print(round(get_current() / get_rate()))
+
+
+def action_update(args):
+    value = args.value * get_rate()
+    if args.transform:
+        value = args.transform(value)
+    value = min(max(round(value), 0), get_max())
+    subprocess.run(['./set-backlight', str(value)])
+    action_get(args)
+
+
+def action_off(args):
+    subprocess.run(['xset', 'dpms', 'force', 'off'])
+
+
+def get_parser():
+    parser = argparse.ArgumentParser()
+    parser.set_defaults(action=action_get)
+    subparsers = parser.add_subparsers()
+
+    get_parser = subparsers.add_parser('get')
+
+    set_parser = subparsers.add_parser('set')
+    set_parser.add_argument('value', type=int)
+    set_parser.set_defaults(action=action_update, transform=None)
+
+    inc_parser = subparsers.add_parser('inc')
+    inc_parser.add_argument('value', type=int)
+    inc_parser.set_defaults(action=action_update, transform=lambda v: get_current() + v)
+
+    dec_parser = subparsers.add_parser('dec')
+    dec_parser.add_argument('value', type=int)
+    dec_parser.set_defaults(action=action_update, transform=lambda v: get_current() - v)
+
+    off_parser = subparsers.add_parser('off')
+    off_parser.set_defaults(action=action_off)
+
+    return parser
+
+
+def main():
+    parser = get_parser()
+    args = parser.parse_args()
+    args.action(args)
+
+
+if __name__ == '__main__':
+    main()
