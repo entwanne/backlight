@@ -53,7 +53,7 @@ def action_update(args):
     if args.transform:
         value = args.transform(value)
     value = min(max(round(value), 0), get_max())
-    subprocess.run(['./set-backlight', get_name(), str(value)])
+    subprocess.run(['set-backlight-raw', get_name(), str(value)])
     action_get(args)
 
 
