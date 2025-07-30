@@ -2,18 +2,41 @@
 
 import argparse
 import subprocess
+import sys
 from functools import cache
 from pathlib import Path
 
-base_path = Path('/sys/class/backlight/intel_backlight')
+
+@cache
+def get_path() -> Path:
+    base_path = Path('/sys/class/backlight')
+    if not base_path.is_dir():
+        raise OSError('Cannot find backlight sys directory')
+
+    for path in base_path.iterdir():
+        if not path.is_dir():
+            continue
+        if not (path / 'brightness').exists():
+            continue
+        if not (path / 'max_brightness').exists():
+            continue
+        return path
+
+    raise OSError('Cannot find any backlight interface')
+
+
+@cache
+def get_name() -> str:
+    return get_path().name
+
 
 def get_current() -> int:
-    return int((base_path / 'brightness').read_text())
+    return int((get_path() / 'brightness').read_text())
 
 
 @cache
 def get_max() -> int:
-    return int((base_path / 'max_brightness').read_text())
+    return int((get_path() / 'max_brightness').read_text())
 
 
 @cache
@@ -30,7 +53,7 @@ def action_update(args):
     if args.transform:
         value = args.transform(value)
     value = min(max(round(value), 0), get_max())
-    subprocess.run(['./set-backlight', str(value)])
+    subprocess.run(['./set-backlight', get_name(), str(value)])
     action_get(args)
 
 
@@ -66,7 +89,11 @@ def get_parser():
 def main():
     parser = get_parser()
     args = parser.parse_args()
-    args.action(args)
+    try:
+        args.action(args)
+    except Exception as e:
+        print(e, file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == '__main__':
